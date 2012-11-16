@@ -28,9 +28,10 @@ using namespace std;
 char *progname;
 char buf[BUF_LEN];
 char inpfile[256];
+vector<int> pages;
 void usage();
 
-int ch,ifile,avframes,sch;
+int ch,ifile,avframes,pgrep,npages;
 extern char *optarg;
 extern int optind;
 
@@ -40,14 +41,21 @@ int main(int argc, char *argv[]) {
 	inpfile[0] = '\0';
 	ifile = 0;
 	avframes=5;
+	pgrep=1;
 	//check various options
 	while ((ch = getopt(argc, argv, "hr:f:i:")) != -1)
 		switch (ch) {
 		case 'r': //set scheduling policy
 			if (strcmp(optarg, "FIFO"))
-				sch = 1;
-			else if (strcmp(optarg, "SJF"))
-				sch = 2;
+				pgrep = 1;
+			else if (strcmp(optarg, "LFU"))
+				pgrep = 2;
+			else if (strcmp(optarg, "LRU-STACK"))
+				pgrep = 3;
+			else if (strcmp(optarg, "LRU-CLOCK"))
+				pgrep = 4;
+			else if (strcmp(optarg, "LRU-REF8"))
+				pgrep = 5;
 			break;
 		case 'f': //no of frames
 			avframes = atoi(optarg);
@@ -64,7 +72,49 @@ int main(int argc, char *argv[]) {
 	argc -= optind;
 	if (argc != 0)
 		usage();
-
+	int i=0,temp;
+	if(ifile==1)
+	{
+		inpfile_fd= fopen(inpfile,"r");
+		while(inpfile_fd)
+		{
+			fscanf(inpfile_fd, "%d" ,&temp);
+			pages.push_back(temp);
+			i++;
+		}
+		npages=i;
+		fclose(inpfile_fd);
+	}
+	else
+	{
+		char *tstr;
+		gets(buf);
+		i=0;
+		tstr = strtok (buf," ");
+		while (tstr != NULL)
+		{
+			temp=atoi(tstr);
+			pages.push_back(temp);
+			i++;
+			tstr = strtok (NULL, " ");
+		}
+		npages=i;
+	}
+	cout<<"Pages:\n";
+	for(i=0;i<npages;i++)
+	{
+		cout<<pages[i]<<" ";
+	}
+	if(pgrep==1)
+		fifo();
+	else if(pgrep==2)
+		lfu();
+	else if(pgrep==3)
+		lrustack();
+	else if(pgrep==4)
+		lruclock();
+	else if(pgrep==5)
+		lruref8();
 	return (0);
 }
 
