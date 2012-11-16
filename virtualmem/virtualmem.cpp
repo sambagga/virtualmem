@@ -116,7 +116,54 @@ void lfu() {
 	}
 	cout<<"\n"<<pagerep;
 }
-
+void lruref8() {
+	map<int, int> ref8;
+	map<int,int>::iterator it;
+	int *frames = new int[avframes];
+	int i = 0, j = 0, flag;
+	pagerep = 0;
+	for (; j < avframes; i++) {
+		for ( it=ref8.begin() ; it != ref8.end(); it++ )
+			(*it).second=(*it).second >>1;
+		for (j = 0; j < i; j++) {
+			if (pages[i] == frames[j]) {
+				if(ref8[pages[i]])
+					ref8[pages[i]] += 128;
+				else
+					ref8[pages[i]] = 128;
+			}
+		}
+	}
+	for (; i < npages; i++) {
+		flag = 0;
+		for ( it=ref8.begin() ; it != ref8.end(); it++ )
+			(*it).second=(*it).second >>1;
+		for (j = 0; j < avframes; j++) {
+			if (frames[j] == pages[i]) {
+				flag = 1;
+				break;
+			}
+		}
+		int min;
+		if (flag == 0) {
+			min=0;
+			for (j = 1; j < avframes; j++) {
+				if(ref8[frames[min]]>ref8[frames[j]])
+					min=j;
+			}
+			frames[min]=pages[i];
+			if(ref8[pages[i]])
+				ref8[pages[i]] += 128;
+			else
+				ref8[pages[i]] = 128;
+			pagerep++;
+		}
+		else{
+			ref8[pages[i]]+=128;
+		}
+	}
+	cout<<"\n"<<pagerep;
+}
 int main(int argc, char *argv[]) {
 	inpfile[0] = '\0';
 	ifile = 0;
@@ -155,7 +202,7 @@ int main(int argc, char *argv[]) {
 	int i = 0, temp;
 	if (ifile == 1) {
 		inpfile_fd = fopen(inpfile, "r");
-		while (inpfile_fd) {
+		while (!feof(inpfile_fd)) {
 			fscanf(inpfile_fd, "%d", &temp);
 			pages.push_back(temp);
 			i++;
@@ -192,9 +239,9 @@ int main(int argc, char *argv[]) {
 	/*else if(pgrep==3)
 	 lrustack();
 	 else if(pgrep==4)
-	 lruclock();
+	 lruclock();*/
 	 else if(pgrep==5)
-	 lruref8();*/
+	 lruref8();
 	return (0);
 }
 
