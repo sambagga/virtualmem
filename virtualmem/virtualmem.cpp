@@ -5,23 +5,13 @@
 #include	<stdio.h>
 #include 	<syslog.h>
 #include	<unistd.h>
-#include	<dirent.h>
 #include	<stdlib.h>
 #include	<string.h>
 #include	<ctype.h>
-#include 	<termios.h>
 #include	<fcntl.h>
 #include	<assert.h>
 #include	<sys/types.h>
-#include	<sys/socket.h>
-#include	<netdb.h>
-#include	<netinet/in.h>
-#include	<inttypes.h>
-#include	<pthread.h>
-#include	<semaphore.h>
 #include	<time.h>
-#include 	<arpa/inet.h>
-#include 	<sys/stat.h>
 
 using namespace std;
 #define BUFSIZE 1024
@@ -37,6 +27,64 @@ extern char *optarg;
 extern int optind;
 
 FILE *inpfile_fd = NULL;
+//Optimal Algorithm
+void optimal() {
+	int *frames = new int[avframes];
+	int i = 0, j = 0, k = 0, flag;
+	pagerep = 0;
+	//Add intitial pages to frames
+	for (; j < avframes; i++) {
+		flag = 0;
+		for (j = 0; j < i; j++) {
+			// Check for references
+			if (pages[i] == frames[j]) {
+				flag = 1;
+				break;
+			}
+		}
+		//Add page
+		if (flag == 0) {
+			frames[j] = pages[i];
+		}
+	}
+	//Main algorithm
+	for (; i < npages; i++) {
+		flag = 0;// to track if page in frame is referenced
+		for (j = 0; j < avframes; j++) {
+			if (frames[j] == pages[i]) {
+				flag = 1; //reference found
+				break;
+			}
+		}
+		int max, tcount, tmax = 0, flagmax = 0;
+		if (flag == 0) {//no reference
+			max = 0;
+			//Find the victim page that will not be used longest time in future
+			for (k = 0; k < avframes; k++) {
+				flagmax = 0;
+				for (j = i + 1, tcount = 1; j < npages; j++, tcount++) {
+					if (frames[k] == pages[j]) {
+						//Compare the count of pages till reference
+						if (tmax < tcount) {
+							flagmax = 1;
+							max = k;
+							tmax=tcount;
+							break;
+						}
+					}
+				}
+				//If page is never referenced in future it becomes the victim
+				if (flagmax == 0) {
+					max = k;
+					break;
+				}
+			}
+			frames[max] = pages[i];
+			pagerep++;
+		}
+	}
+	cout << "\n" << pagerep;
+}
 void fifo() {
 	int *frames = new int[avframes];
 	int i = 0, j = 0, flag;
@@ -98,36 +146,35 @@ void lfu() {
 		}
 		int min;
 		if (flag == 0) {
-			min=0;
+			min = 0;
 			for (j = 1; j < avframes; j++) {
-				if(freq[frames[min]]>freq[frames[j]])
-					min=j;
+				if (freq[frames[min]] > freq[frames[j]])
+					min = j;
 			}
-			frames[min]=pages[i];
-			if(freq[pages[i]]!=0)
+			frames[min] = pages[i];
+			if (freq[pages[i]] != 0)
 				freq[pages[i]]++;
 			else
-				freq[pages[i]]=1;
+				freq[pages[i]] = 1;
 			pagerep++;
-		}
-		else{
+		} else {
 			freq[pages[i]]++;
 		}
 	}
-	cout<<"\n"<<pagerep;
+	cout << "\n" << pagerep;
 }
 void lruref8() {
 	map<int, int> ref8;
-	map<int,int>::iterator it;
+	map<int, int>::iterator it;
 	int *frames = new int[avframes];
 	int i = 0, j = 0, flag;
 	pagerep = 0;
 	for (; j < avframes; i++) {
-		for ( it=ref8.begin() ; it != ref8.end(); it++ )
-			(*it).second=(*it).second >>1;
+		for (it = ref8.begin(); it != ref8.end(); it++)
+			(*it).second = (*it).second >> 1;
 		for (j = 0; j < i; j++) {
 			if (pages[i] == frames[j]) {
-				if(ref8[pages[i]])
+				if (ref8[pages[i]])
 					ref8[pages[i]] += 128;
 				else
 					ref8[pages[i]] = 128;
@@ -136,8 +183,8 @@ void lruref8() {
 	}
 	for (; i < npages; i++) {
 		flag = 0;
-		for ( it=ref8.begin() ; it != ref8.end(); it++ )
-			(*it).second=(*it).second >>1;
+		for (it = ref8.begin(); it != ref8.end(); it++)
+			(*it).second = (*it).second >> 1;
 		for (j = 0; j < avframes; j++) {
 			if (frames[j] == pages[i]) {
 				flag = 1;
@@ -146,23 +193,22 @@ void lruref8() {
 		}
 		int min;
 		if (flag == 0) {
-			min=0;
+			min = 0;
 			for (j = 1; j < avframes; j++) {
-				if(ref8[frames[min]]>ref8[frames[j]])
-					min=j;
+				if (ref8[frames[min]] > ref8[frames[j]])
+					min = j;
 			}
-			frames[min]=pages[i];
-			if(ref8[pages[i]])
+			frames[min] = pages[i];
+			if (ref8[pages[i]])
 				ref8[pages[i]] += 128;
 			else
 				ref8[pages[i]] = 128;
 			pagerep++;
-		}
-		else{
-			ref8[pages[i]]+=128;
+		} else {
+			ref8[pages[i]] += 128;
 		}
 	}
-	cout<<"\n"<<pagerep;
+	cout << "\n" << pagerep;
 }
 int main(int argc, char *argv[]) {
 	inpfile[0] = '\0';
@@ -173,15 +219,15 @@ int main(int argc, char *argv[]) {
 	while ((ch = getopt(argc, argv, "hr:f:i:")) != -1)
 		switch (ch) {
 		case 'r': //set scheduling policy
-			if (strcmp(optarg, "FIFO")==0)
+			if (strcmp(optarg, "FIFO") == 0)
 				pgrep = 1;
-			else if (strcmp(optarg, "LFU")==0)
+			else if (strcmp(optarg, "LFU") == 0)
 				pgrep = 2;
-			else if (strcmp(optarg, "LRU-STACK")==0)
+			else if (strcmp(optarg, "LRU-STACK") == 0)
 				pgrep = 3;
-			else if (strcmp(optarg, "LRU-CLOCK")==0)
+			else if (strcmp(optarg, "LRU-CLOCK") == 0)
 				pgrep = 4;
-			else if (strcmp(optarg, "LRU-REF8")==0)
+			else if (strcmp(optarg, "LRU-REF8") == 0)
 				pgrep = 5;
 			break;
 		case 'f': //no of frames
@@ -222,26 +268,23 @@ int main(int argc, char *argv[]) {
 		}
 		npages = i;
 	}
-	cout << "Pages:\n";
-	for (i = 0; i < npages; i++) {
-		cout << pages[i] << " ";
-	}
-	if (pgrep == 1)
-	{
-		cout<<"FIFO:\n";
+	cout << "Optimal:\n";
+	optimal();
+	if (pgrep == 1) {
+		cout << "FIFO:\n";
 		fifo();
-	}
-	else if (pgrep == 2)
-	{
-		cout<<"LFU:\n";
+	} else if (pgrep == 2) {
+		cout << "LFU:\n";
 		lfu();
 	}
 	/*else if(pgrep==3)
 	 lrustack();
 	 else if(pgrep==4)
 	 lruclock();*/
-	 else if(pgrep==5)
-	 lruref8();
+	else if (pgrep == 5) {
+		cout << "LRU-REF8\n";
+		lruref8();
+	}
 	return (0);
 }
 
