@@ -8,16 +8,13 @@
 #include	<stdlib.h>
 #include	<string.h>
 #include	<ctype.h>
-#include	<fcntl.h>
-#include	<assert.h>
 #include	<sys/types.h>
+#include	<sys/time.h>
 #include	<time.h>
 
 using namespace std;
 #define BUFSIZE 1024
 char *progname;
-char buf[BUF_LEN];
-char inpfile[256];
 vector<int> pages;
 void usage();
 
@@ -26,21 +23,21 @@ typedef struct ll {
 	struct ll *down;
 } llstack;
 
-int ch, ifile, avframes, pgrep, npages;
-int pagerep;
+int  avframes,npages;
 extern char *optarg;
 extern int optind;
 
 FILE *inpfile_fd = NULL;
 //Optimal Algorithm
-void optimal() {
-	int *frames = new int[avframes];
+int optimal() {
+	//int *frames = new int[avframes];
+	int frames[30];
 	int i = 0, j = 0, k = 0, flag;
-	pagerep = 0;
-	//Add intitial pages to frames
-	for (; i < avframes; i++) {
+	int pagerep = 0,pagecount=0;
+	//Add initial pages to frames
+	for (; pagecount < avframes; i++) {
 		flag = 0;
-		for (j = 0; j < i; j++) {
+		for (j = 0; j < pagecount; j++) {
 			// Check for references
 			if (pages[i] == frames[j]) {
 				flag = 1;
@@ -49,10 +46,12 @@ void optimal() {
 		}
 		//Add page
 		if (flag == 0) {
-			frames[j] = pages[i];
+			frames[pagecount] = pages[i];
+			pagecount++;
 		}
 	}
 	//Main algorithm
+	int max, tcount, tmax = 0, flagmax = 0;
 	for (; i < npages; i++) {
 		flag = 0; // to track if page in frame is referenced
 		for (j = 0; j < avframes; j++) {
@@ -61,26 +60,27 @@ void optimal() {
 				break;
 			}
 		}
-		int max, tcount, tmax = 0, flagmax = 0;
+
 		if (flag == 0) { //no reference
-			max = 0;
+			max = 0;tmax=0;
 			//Find the victim page that will not be used longest time in future
 			for (k = 0; k < avframes; k++) {
 				flagmax = 0;
-				for (j = i + 1, tcount = 1; j < npages; j++, tcount++) {
+				for (j = i + 1; j < npages; j++) {
 					if (frames[k] == pages[j]) {
 						//Compare the count of pages till reference
-						if (tmax < tcount) {
-							flagmax = 1;
+						flagmax = 1;
+						if (tmax < j) {
 							max = k;
-							tmax = tcount;
-							break;
+							tmax = j;
 						}
+						break;
 					}
 				}
 				//If page is never referenced in future it becomes the victim
 				if (flagmax == 0) {
 					max = k;
+					tmax=j;
 					break;
 				}
 			}
@@ -88,22 +88,23 @@ void optimal() {
 			pagerep++;
 		}
 	}
-	printf("%d\n", pagerep);
+	return pagerep;
 }
-void fifo() {
+int fifo() {
 	int *frames = new int[avframes];
 	int i = 0, j = 0, flag;
-	pagerep = 0;
-	for (; i < avframes; i++) {
+	int pagerep = 0,pagecount=0;
+	for (; pagecount < avframes; i++) {
 		flag = 0;
-		for (j = 0; j < i; j++) {
+		for (j = 0; j < pagecount; j++) {
 			if (pages[i] == frames[j]) {
 				flag = 1;
 				break;
 			}
 		}
 		if (flag == 0) {
-			frames[j] = pages[i];
+			frames[pagecount] = pages[i];
+			pagecount++;
 		}
 	}
 	for (; i < npages; i++) {
@@ -119,23 +120,24 @@ void fifo() {
 			pagerep++;
 		}
 	}
-	printf("%d\n", pagerep);
+	return pagerep;
 }
-void lfu() {
+int lfu() {
 	map<int, int> freq;
 	int *frames = new int[avframes];
 	int i = 0, j = 0, flag;
-	pagerep = 0;
-	for (; i < avframes; i++) {
+	int pagerep = 0,pagecount=0;
+	for (; pagecount < avframes; i++) {
 		flag = 0;
-		for (j = 0; j < i; j++) {
+		for (j = 0; j < pagecount; j++) {
 			if (pages[i] == frames[j]) {
 				flag = 1;
 				break;
 			}
 		}
 		if (flag == 0) {
-			frames[j] = pages[i];
+			frames[pagecount] = pages[i];
+			pagecount++;
 			freq[pages[i]] = 1;
 		} else {
 			freq[pages[i]]++;
@@ -166,13 +168,13 @@ void lfu() {
 			freq[pages[i]]++;
 		}
 	}
-	printf("%d\n", pagerep);
+	return pagerep;
 }
-void lrustack() {
+int lrustack() {
 	llstack *top = NULL, *temp1, *temp2;
 	int i = 0, j = 0, flag;
-	pagerep = 0;
-	for (temp1 = top; i < avframes; i++) {
+	int pagerep = 0;
+	for (temp1 = top; j < avframes; i++) {
 		flag = 0;
 		for (temp2 = top, j = 0; j < i && temp2 != NULL;
 				j++, temp2 = temp2->down) {
@@ -218,53 +220,69 @@ void lrustack() {
 			pagerep++;
 		}
 	}
-	printf("%d\n", pagerep);
+	return pagerep;
 }
-void lruclock() {
+int lruclock() {
 	int *frames = new int[avframes];
 	int *clock = new int[avframes];
 	int i = 0, j = 0, flag;
-	pagerep = 0;
-	for (; i < avframes; i++) {
+	int pagerep = 0,pagecount=0;
+	for (; pagecount < avframes; i++) {
 		flag = 0;
-		for (j = 0; j < i; j++) {
+		for (j = 0; j < pagecount; j++) {
 			if (pages[i] == frames[j]) {
 				flag = 1;
-				clock[j] = 0;
+				clock[j] = 1;
 				break;
 			}
 		}
 		if (flag == 0) {
-			frames[j] = pages[i];
-			clock[j] = 1;
+			frames[pagecount] = pages[i];
+			pagecount++;
+			clock[j] = 0;
 		}
 	}
+	int ptr = 0;
 	for (; i < npages; i++) {
 		flag = 0;
 		for (j = 0; j < avframes; j++) {
 			if (frames[j] == pages[i]) {
 				flag = 1;
+				clock[j] = 1;
 				break;
 			}
 		}
 		if (flag == 0) {
-			frames[pagerep % avframes] = pages[i];
-			pagerep++;
+			for (j = ptr;; j++) {
+				j = j % avframes;
+				if (clock[j] == 0) {
+					frames[j] = pages[i];
+					pagerep++;
+					if (j + 1 < avframes)
+						ptr = j + 1;
+					else
+						ptr = 0;
+					break;
+				} else {
+					clock[j] = 0;
+					ptr = j;
+				}
+			}
 		}
 	}
-	printf("%d\n", pagerep);
+	return pagerep;
 }
-void lruref8() {
+int lruref8() {
 	map<int, int> ref8;
 	map<int, int>::iterator it;
 	int *frames = new int[avframes];
 	int i = 0, j = 0, flag;
-	pagerep = 0;
-	for (; i < avframes; i++) {
+	int pagerep = 0,pagecount=0;
+	for (; pagecount < avframes; i++) {
 		flag = 0;
 		for (j = 0; j < ref8.size(); j++)
 			ref8[j] = ref8[j] >> 1;
-		for (j = 0; j < i; j++) {
+		for (j = 0; j < pagecount; j++) {
 			if (pages[i] == frames[j]) {
 				flag = 1;
 				if (ref8[pages[i]])
@@ -275,7 +293,8 @@ void lruref8() {
 			}
 		}
 		if (flag == 0) {
-			frames[j] = pages[i];
+			frames[pagecount] = pages[i];
+			pagecount++;
 			ref8[pages[i]] = 128;
 		}
 	}
@@ -303,21 +322,25 @@ void lruref8() {
 				ref8[pages[i]] = 128;
 			pagerep++;
 		} else {
-			ref8[pages[i]]=ref8[pages[i]]>>1;
+			ref8[pages[i]] = ref8[pages[i]] >> 1;
 			ref8[pages[i]] += 128;
 		}
 	}
-	printf("%d\n", pagerep);
+	return pagerep;
 }
 int main(int argc, char *argv[]) {
-	inpfile[0] = '\0';
-	ifile = 0;
+	struct timeval optst,optend,algst,algend;
+	char inpfile[256];
+	char buf[BUF_LEN];
+	int ifile = 0,ch;
+	char algo[12];
 	avframes = 5;
-	pgrep = 1;
+	int pgrep = 1;
 	//check various options
 	while ((ch = getopt(argc, argv, "hr:f:i:")) != -1)
 		switch (ch) {
 		case 'r': //set scheduling policy
+			strcpy(algo,optarg);
 			if (strcmp(optarg, "FIFO") == 0)
 				pgrep = 1;
 			else if (strcmp(optarg, "LFU") == 0)
@@ -367,24 +390,40 @@ int main(int argc, char *argv[]) {
 		}
 		npages = i;
 	}
-	printf("Optimal:");
-	optimal();
+	gettimeofday(&optst, NULL);
+	int optrep = optimal();
+	gettimeofday(&optend, NULL);
+	int algrep;
 	if (pgrep == 1) {
-		printf("FIFO:");
-		fifo();
+		gettimeofday(&algst, NULL);
+		algrep = fifo();
+		gettimeofday(&algend, NULL);
 	} else if (pgrep == 2) {
-		printf("LFU:");
-		lfu();
+		gettimeofday(&algst, NULL);
+		algrep = lfu();
+		gettimeofday(&algend, NULL);
 	} else if (pgrep == 3) {
-		printf("LRU-STACK:");
-		lrustack();
+		gettimeofday(&algst, NULL);
+		algrep = lrustack();
+		gettimeofday(&algend, NULL);
 	} else if (pgrep == 4) {
-		printf("LRU-CLOCK");
-		lruclock();
+		gettimeofday(&algst, NULL);
+		algrep = lruclock();
+		gettimeofday(&algend, NULL);
 	} else if (pgrep == 5) {
-		cout << "LRU-REF8:";
-		lruref8();
+		gettimeofday(&algst, NULL);
+		algrep = lruref8();
+		gettimeofday(&algend, NULL);
 	}
+	cout << "# of page replacements with "<<algo<<"\t:" << algrep;
+	cout << "\n# of page replacements with Optimal\t:" << optrep;
+	cout << "\n% page replacement penalty using LFU\t:"
+			<< ((float)(algrep - optrep) / optrep) * 100;
+	uint algtime= (uint)algend.tv_usec-(uint)algst.tv_usec;
+	uint opttime= (uint)optend.tv_usec-(uint)optst.tv_usec;
+	cout<<"\nTotal time to run "<<algo<<" algorithm\t:"<<algtime<<"usec";
+	cout<<"\nTotal time to run Optimal algorithm\t:"<<opttime<<"usec";
+	cout<<"\n"<<algo<<" is "<<((float)(opttime-algtime)/algtime)*100<<"% faster than Optimal algorithm.";
 	return (0);
 }
 
